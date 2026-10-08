@@ -1,12 +1,10 @@
 import os
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 
-# Obtenemos las claves secretas guardadas en GitHub Secrets
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# URL exactadel producto de El Corte Inglés
 URL = "https://www.elcorteingles.es/juguetes/A202035444-30th-blister-de-sobres-de-mejora-de-celebracion-30-aniversario-de-jcc-pokemon-pokemon-bandai/"
 
 def enviar_telegram(mensaje):
@@ -14,29 +12,29 @@ def enviar_telegram(mensaje):
         url_api = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         payload = {"chat_id": CHAT_ID, "text": mensaje}
         try:
-            requests.post(url_api, data=payload, timeout=10)
+            # Para el envío a Telegram usamos una petición directa
+            import requests as req_std
+            req_std.post(url_api, data=payload, timeout=10)
         except Exception as e:
             print(f"Error enviando mensaje a Telegram: {e}")
 
 def comprobar_stock():
-    # Cabeceras para simular un navegador real en El Corte Inglés
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
     }
     
     try:
-        respuesta = requests.get(URL, headers=headers, timeout=15)
+        # impersonate="chrome120" camufla la conexión para saltar la protección 403
+        respuesta = requests.get(URL, headers=headers, impersonate="chrome120", timeout=20)
         
-        # Comprobar si la web responde correctamente
         if respuesta.status_code != 200:
             print(f"La web respondió con estado {respuesta.status_code}. Posible bloqueo.")
             return
 
         soup = BeautifulSoup(respuesta.text, "html.parser")
         
-        # Buscamos el botón id="add_to_cart_main_button" de El Corte Inglés
         boton = soup.find("button", id="add_to_cart_main_button")
         
         if not boton:
@@ -46,7 +44,6 @@ def comprobar_stock():
         clases = boton.get("class", [])
         aria_disabled = boton.get("aria-disabled")
         
-        # Verifica si está deshabilitado
         esta_deshabilitado = (aria_disabled == "true") or ("pds-button--is-disabled" in clases)
         
         if esta_deshabilitado:
