@@ -7,12 +7,15 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 URL = "https://www.elcorteingles.es/juguetes/A202035444-30th-blister-de-sobres-de-mejora-de-celebracion-30-aniversario-de-jcc-pokemon-pokemon-bandai/"
 
-def enviar_telegram(mensaje):
+def enviar_telegram(mensaje, silencioso=False):
     if TOKEN and CHAT_ID:
         url_api = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": mensaje}
+        payload = {
+            "chat_id": CHAT_ID, 
+            "text": mensaje,
+            "disable_notification": silencioso  # Si es True, envía el mensaje sin sonido/vibración
+        }
         try:
-            # Para el envío a Telegram usamos una petición directa
             import requests as req_std
             req_std.post(url_api, data=payload, timeout=10)
         except Exception as e:
@@ -26,7 +29,6 @@ def comprobar_stock():
     }
     
     try:
-        # impersonate="chrome120" camufla la conexión para saltar la protección 403
         respuesta = requests.get(URL, headers=headers, impersonate="chrome120", timeout=20)
         
         if respuesta.status_code != 200:
@@ -34,7 +36,6 @@ def comprobar_stock():
             return
 
         soup = BeautifulSoup(respuesta.text, "html.parser")
-        
         boton = soup.find("button", id="add_to_cart_main_button")
         
         if not boton:
@@ -48,6 +49,9 @@ def comprobar_stock():
         
         if esta_deshabilitado:
             print("El producto de Pokémon en El Corte Inglés sigue AGOTADO...")
+            mensaje = "ℹ️ [Comprobación] El producto de Pokémon sigue AGOTADO en El Corte Inglés."
+            # Enviamos el aviso en SILENCIO (sin sonido ni vibración)
+            enviar_telegram(mensaje, silencioso=True)
         else:
             print("¡¡HAY STOCK!! Enviando aviso a Telegram...")
             mensaje = (
@@ -55,7 +59,8 @@ def comprobar_stock():
                 "El blíster de sobres Pokémon 30º Aniversario ya se puede añadir a la cesta.\n\n"
                 f"Enlace directo:\n{URL}"
             )
-            enviar_telegram(mensaje)
+            # Enviamos el aviso NORMAL (con sonido y notificación)
+            enviar_telegram(mensaje, silencioso=False)
             
     except Exception as e:
         print(f"Error al consultar El Corte Inglés: {e}")
