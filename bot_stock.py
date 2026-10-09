@@ -13,11 +13,10 @@ def enviar_telegram(mensaje, silencioso=False):
         payload = {
             "chat_id": CHAT_ID, 
             "text": mensaje,
-            "disable_notification": silencioso  # Si es True, envía el mensaje sin sonido/vibración
+            "disable_notification": silencioso  # Si es True, envía el mensaje sin sonido ni vibración
         }
         try:
-            import requests as req_std
-            req_std.post(url_api, data=payload, timeout=10)
+            requests.post(url_api, data=payload, timeout=10)
         except Exception as e:
             print(f"Error enviando mensaje a Telegram: {e}")
 
