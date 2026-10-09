@@ -1,4 +1,5 @@
 import os
+import datetime
 from curl_cffi import requests
 from bs4 import BeautifulSoup
 
@@ -7,18 +8,65 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 URL = "https://www.elcorteingles.es/juguetes/A202035444-30th-blister-de-sobres-de-mejora-de-celebracion-30-aniversario-de-jcc-pokemon-pokemon-bandai/"
 
-def enviar_telegram(mensaje, silencioso=False):
-    if TOKEN and CHAT_ID:
-        url_api = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+def obtener_o_crear_mensaje_fijado():
+    if not TOKEN or not CHAT_ID:
+        return None
+    
+    # 1. Consultar si ya existe un mensaje fijado en el chat
+    url_get_chat = f"https://api.telegram.org/bot{TOKEN}/getChat"
+    try:
+        resp = requests.post(url_get_chat, data={"chat_id": CHAT_ID}, timeout=10)
+        data = resp.json()
+        if data.get("ok") and "pinned_message" in data.get("result", {}):
+            return data["result"]["pinned_message"]["message_id"]
+    except Exception as e:
+        print(f"Error consultando getChat: {e}")
+
+    # 2. Si no hay mensaje fijado, enviamos uno inicial y lo fijamos
+    url_send = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": "📌 [PANEL DE ESTADO] Iniciando monitor de stock...",
+        "disable_notification": "true"
+    }
+    try:
+        resp = requests.post(url_send, data=payload, timeout=10)
+        data = resp.json()
+        if data.get("ok"):
+            msg_id = data["result"]["message_id"]
+            url_pin = f"https://api.telegram.org/bot{TOKEN}/pinChatMessage"
+            requests.post(url_pin, data={"chat_id": CHAT_ID, "message_id": msg_id, "disable_notification": "true"}, timeout=10)
+            return msg_id
+    except Exception as e:
+        print(f"Error creando mensaje fijado: {e}")
+        
+    return None
+
+def actualizar_estado_sin_notificacion(texto_estado):
+    msg_id = obtener_o_crear_mensaje_fijado()
+    if msg_id and TOKEN and CHAT_ID:
+        url_edit = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
         payload = {
-            "chat_id": CHAT_ID, 
-            "text": mensaje,
-            "disable_notification": silencioso  # Si es True, envía el mensaje sin sonido ni vibración
+            "chat_id": CHAT_ID,
+            "message_id": msg_id,
+            "text": texto_estado
         }
         try:
-            requests.post(url_api, data=payload, timeout=10)
+            requests.post(url_edit, data=payload, timeout=10)
         except Exception as e:
-            print(f"Error enviando mensaje a Telegram: {e}")
+            print(f"Error editando mensaje: {e}")
+
+def enviar_alerta_stock(mensaje_texto):
+    if TOKEN and CHAT_ID:
+        url_send = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHAT_ID,
+            "text": mensaje_texto
+        }
+        try:
+            requests.post(url_send, data=payload, timeout=10)
+        except Exception as e:
+            print(f"Error enviando alerta de stock: {e}")
 
 def comprobar_stock():
     headers = {
@@ -46,11 +94,19 @@ def comprobar_stock():
         
         esta_deshabilitado = (aria_disabled == "true") or ("pds-button--is-disabled" in clases)
         
+        # Hora actual para indicar en el mensaje de estado
+        hora_actual = datetime.datetime.now().strftime("%H:%M:%S")
+
         if esta_deshabilitado:
             print("El producto de Pokémon en El Corte Inglés sigue AGOTADO...")
-            mensaje = "ℹ️ [Comprobación] El producto de Pokémon sigue AGOTADO en El Corte Inglés."
-            # Enviamos el aviso en SILENCIO (sin sonido ni vibración)
-            enviar_telegram(mensaje, silencioso=True)
+            texto_estado = (
+                f"📌 [PANEL DE ESTADO]\n\n"
+                f"Última comprobación: {hora_actual}\n"
+                f"Estado: 🔴 AGOTADO\n\n"
+                f"El bot sigue revisando automáticamente."
+            )
+            # Edita el mensaje fijado (generando 0 notificaciones)
+            actualizar_estado_sin_notificacion(texto_estado)
         else:
             print("¡¡HAY STOCK!! Enviando aviso a Telegram...")
             mensaje = (
@@ -58,8 +114,8 @@ def comprobar_stock():
                 "El blíster de sobres Pokémon 30º Aniversario ya se puede añadir a la cesta.\n\n"
                 f"Enlace directo:\n{URL}"
             )
-            # Enviamos el aviso NORMAL (con sonido y notificación)
-            enviar_telegram(mensaje, silencioso=False)
+            # Envía un mensaje totalmente NUEVO que sí hace sonar la alarma
+            enviar_alerta_stock(mensaje)
             
     except Exception as e:
         print(f"Error al consultar El Corte Inglés: {e}")
